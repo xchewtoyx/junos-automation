@@ -1,0 +1,51 @@
+version 1.0;
+
+ns junos = "http://xml.juniper.net/junos/*/junos";
+ns xnm = "http://xml.junipernet/xnm/1.1/xnm";
+ns jcs = "http://xml.juniper.net/junos/commit-scripts/1.0";
+
+import "../import/junos.xsl";
+
+var $global_var = "foo";
+
+template print-message($message="No Message!") {
+    <output> $message;
+}
+
+template local-check {
+    var $local_var = "Local Variable";
+    <output> "Printing local variable from within local-check";
+    <output> $local_var;
+    <output> "Printing global variable from within local-check";
+    <output> $global_var;
+}
+
+template and-test($statement1="false", $statement2="false") {
+    var $result = {
+        if ($statement1=="true" && $statement2=="true") {
+            expr "true";
+        }
+        else {
+            expr "false";
+        }
+    }
+    <output> "If s1 is " _ $statement1 _ " and s2 is " _ $statement2 _ " then result is " _ $result _ ".";
+}
+
+match / {
+    <op-script-results> {
+        call print-message($message="Lab 2 part 3");
+        <output> "Hello World!";
+        <output>;
+        call print-message($message="Lab 2 part 5");
+        call print-message($message="named template");
+        call print-message($message="Lab 2 part 6");
+        call print-message($message="global is " _ $global_var);
+        call local-check;
+        <output>;
+        call and-test;
+        call and-test($statement1="false", $statement2="true");
+        call and-test($statement1="true", $statement2="false");
+        call and-test($statement1="true", $statement2="true");
+    }
+}
