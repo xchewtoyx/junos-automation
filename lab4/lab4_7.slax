@@ -1,0 +1,81 @@
+version 1.0;
+
+ns junos = "http://xml.juniper.net/junos/*/junos";
+ns xnm = "http://xml.juniper.net/xnm/1.1/xnm";
+ns jcs = "http://xml.juniper.net/junos/commit-scripts/1.0";
+
+import "../import/junos.xsl";
+
+match configuration {
+    var $macro = "policy-route";
+    var $result := {
+        for-each (firewall//filter/term/then/apply-macro[name == $macro]) {
+            var $next-hop = data[name == "next-hop"]/value;
+            if(jcs:empty($next-hop)) {
+                <xnm:warning> {
+                    call jcs:edit-path();
+                    <message> "No next-hop value found";
+                }
+            }
+            else {
+                <xnm:warning> {
+                    call jcs:edit-path();
+                    <message> "Next-hop value of " _ $next-hop _ " found.";
+                }
+                var $instance-name = "fbf-" _ $next-hop;
+                call jcs:emit-change {
+                    with $dot = ..;
+                    with $content = {
+                        <routing-instance> {
+                            <routing-instance-name> $instance-name;
+                        }
+                    }
+                    with $message = "Routing instance " _ $instance-name _ " added.";
+                }
+                <transient-change> {
+                    <routing-instances> {
+                        <instance> {
+                            <name> $instance-name;
+                            <instance-type> "forwarding";
+                            <routing-options> {
+                                <static> {
+                                    <route> {
+                                        <name> "0.0.0.0/0";
+                                        <next-hop> $next-hop;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                <instance-name> $instance-name;
+            }
+        }
+    }
+    copy-of $result/transient-change;
+    copy-of $result/xnm:warning;
+    var $interface-routes-rib-group = routing-options/interface-routes/rib-group/inet;
+    var $rib-group-config = routing-options/rib-groups[name == $interface-routes-rib-group];
+    <transient-change> {
+        <routing-options> {
+            <interface-routes> {
+                <rib-group> {
+                    <inet> "fbf-ribs";
+                }
+            }
+            <rib-groups> {
+                <name> "fbf-ribs";
+                if ($interface-routes-rib-group) {
+                    copy-of $rib-group-config/import-rib;
+                }
+                else {
+                    <import-rib> "inet.0";
+                }
+                for-each($result/instance-name) {
+                    <import-rib> . _ ".inet.0";
+                }
+            }
+        }
+    }
+}
+

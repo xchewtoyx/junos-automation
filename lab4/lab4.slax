@@ -1,0 +1,42 @@
+version 1.0;
+
+ns junos = "http://xml.juniper.net/junos/*/junos";
+ns xnm = "http://xml.juniper.net/xnm/1.1/xnm";
+ns jcs = "http://xml.juniper.net/junos/commit-scripts/1.0";
+
+import "../import/junos.xsl";
+
+match configuration {
+    <xnm:warning> {
+        call jcs:edit-path();
+        <message> "HELLO??? Adding example routing instance";
+    }
+    <transient-change> {
+        <routing-instances> {
+            <instance> {
+                <name> "example";
+                <instance-type> "forwarding";
+            }
+        }
+    }
+    <xnm:warning> {
+        call jcs:edit-path();
+        <message> "blah blah blah";
+    }
+    <xnm:warning> {
+        <edit-path> "[edit]";
+        <message> "blah blah blah";
+    }
+
+    var $location = routing-instances;
+    var $content = {
+        <instance> {
+            <name> "example2";
+            <instance-type> "forwarding";
+        }
+    }
+    var $message = "Adding example2 routing instance";
+
+    call jcs:emit-change($dot = $location, $content, $message);
+}
+
