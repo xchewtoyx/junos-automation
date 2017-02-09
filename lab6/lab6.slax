@@ -1,0 +1,72 @@
+version 1.0;
+
+ns junos = "http://xml.juniper.net/junos/*/junos";
+ns xnm = "http://xml.juniper.net/xnm/1.1/xnm";
+ns jcs = "http://xml.juniper.net/junos/commit-scripts/1.0";
+
+import "../import/junos.xsl";
+
+template adjust {
+    expr jcs:syslog("user.notice", "[lab6.slax] Template adjust called correctly.");
+    var $interface-unit = event-script-input/trigger-event/attribute-list/attribute[name = "interface-name"]/value;
+    var $current-config = jcs:invoke("get-configuration");
+    if (jcs:empty($current-config)) {
+        expr jcs:syslog("user.err", "[Error]: Unable to read configuration.");
+    }
+    else if (not($current-config/protocols/ospf/area/interface[name == $interface-unit]) 
+           || $current-config/protocols/ospf/area/interface[name == $interface-unit && metric > 499]) {
+        expr jcs:syslog("user.err", "[Debug]: No OSPF metrics to update for interface.");
+    }
+    else {
+        expr jcs:syslog("user.notice", "Interface needs to be adjusted");
+        var $build-update = {
+            <configuration> {
+                <protocols> {
+                    <ospf> {
+                        for-each ($current-config/protocols/ospf/area[interface[name == $interface-unit]]) {
+                            <area> {
+                                <name> name;
+                                <interface> {
+                                    <name> $interface-unit;
+                                    <metric> "500";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        var $connection = jcs:open();
+        if(not($connection)) {
+            expr jcs:syslog("user.notice", "[Error] Unable to connect to mgd");
+        }
+        else {
+            var $change-results := {
+                call jcs:load-configuration($connection, $configuration=$build-update);
+            }
+            if ($change-results//xnm:error) {
+                expr jcs:syslog("user.err", "[Error] Error during commit (", $change-results//xnm:warning/message, ")");
+            }
+            else {
+                expr jcs:syslog("user.notice", "[Debug] Updated OSPF Metric");
+            }
+        }
+        expr jcs:close($connection);
+    }
+}
+
+match / {
+    <event-script-results> {
+        expr jcs:syslog("user.notice", "This message was generated to verify that the lab6 event script is working");
+        if (not(event-script-input/trigger-event/id)) {
+            expr jcs:syslog("user.err", "[Error]: Called without a <trigger-event>/<id> element.");
+        }
+        else if (event-script-input/trigger-event/id == "RPD_OSPF_NBRDOWN") {
+            call adjust();
+        }
+        else {
+            expr jcs:syslog("user.err", "[Error]: Called with unexpected event.");
+        }
+    }
+}
+
